@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+﻿import { createContext, useContext, useState, type ReactNode } from 'react'
+import { endpointUrl } from './services/api'
 
 export type Role = 'administradora' | 'mesera'
 
@@ -27,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
 
   const login = async (username: string, password: string, selectedRole: Role) => {
-    const response = await fetch('http://127.0.0.1:8000/api/auth/login', {
+    const response = await fetch(endpointUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const payload = await response.json()
     if (payload.rol !== selectedRole) {
-      throw new Error(`El usuario no pertenece al perfil ${selectedRole}`)
+      throw new Error(El usuario no pertenece al perfil )
     }
 
     const authenticatedUser: AuthUser = { ...payload }

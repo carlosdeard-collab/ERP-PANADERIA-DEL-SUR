@@ -1,4 +1,4 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '')
+﻿const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '')
 const hostname = window.location.hostname
 const localHostname = /^(localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|::1)$/i.test(hostname)
 const localApiUrl = import.meta.env.DEV && localHostname
@@ -6,7 +6,7 @@ const localApiUrl = import.meta.env.DEV && localHostname
   : ''
 const API_URL = configuredApiUrl || localApiUrl
 
-function endpointUrl(path: string) {
+export function endpointUrl(path: string) {
   if (!API_URL) {
     throw new Error('Configura VITE_API_URL para conectar con el backend.')
   }
@@ -75,3 +75,4 @@ export async function downloadFile(path: string, fallbackFilename: string) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
   return filename
 }
+
