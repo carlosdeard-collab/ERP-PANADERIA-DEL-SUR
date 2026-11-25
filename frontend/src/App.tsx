@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type Role } from './AuthContext'
 import { Banknote, BarChart3, Boxes, ChefHat, Clock3, Eye, EyeOff, LogOut, Menu as MenuIcon, Minus, Package, PanelLeftClose, PanelLeftOpen, Plus, Printer, Receipt, ShoppingCart, Table, Trash2, Users, X } from 'lucide-react'
 import { api } from './services/api'
@@ -688,11 +688,13 @@ function PointOfSaleView({
   isAdmin,
   initialSaleId,
   chargeOnOpen,
+  onOpenHandled,
   onPaid,
 }: {
   isAdmin: boolean
   initialSaleId: number | null
   chargeOnOpen: boolean
+  onOpenHandled: () => void
   onPaid: () => void
 }) {
   const [section, setSection] = useState<'pos' | 'history'>('pos')
@@ -754,7 +756,8 @@ function PointOfSaleView({
         setPaymentOpen(true)
       }
     }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'No fue posible cargar la venta'))
-  }, [initialSaleId, chargeOnOpen])
+      .then(() => onOpenHandled())
+  }, [initialSaleId, chargeOnOpen, onOpenHandled])
 
   const lines = serviceType === 'mesa' ? sale?.detalles || [] : counterLines
   const total = lines.reduce((sum, line) => sum + line.subtotal, 0)
@@ -1267,6 +1270,11 @@ export default function App() {
     return () => window.removeEventListener('hashchange', syncFromHash)
   }, [user])
 
+  const clearSaleLaunch = useCallback(() => {
+    setActiveSaleId(null)
+    setChargeOnOpen(false)
+  }, [])
+
   if (!user) return <LoginScreen />
 
   const menu = allMenu.filter((item) => item.roles.some((role) => role === user.rol))
@@ -1345,6 +1353,7 @@ export default function App() {
                     isAdmin={user.rol === 'administradora'}
                     initialSaleId={activeSaleId}
                     chargeOnOpen={chargeOnOpen}
+                    onOpenHandled={clearSaleLaunch}
                     onPaid={() => {
                       setActiveSaleId(null)
                       setChargeOnOpen(false)
