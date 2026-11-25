@@ -1365,7 +1365,7 @@ export default function App() {
               <p>Acceso autorizado para el perfil {user.rol}.</p>
             </div>
           )}
-        <footer>ERP Panadería · Versión 0.1.0 · Entorno local</footer>
+        <footer>ERP Panadería  Versión 1.0 · Entorno de producción</footer>
       </section>
       {(user.rol === 'mesera' || user.rol === 'administradora') && (
         <nav className="mobile-quickbar" aria-label="Accesos rápidos">
