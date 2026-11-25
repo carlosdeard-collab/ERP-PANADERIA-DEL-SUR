@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const payload = await response.json()
     if (payload.rol !== selectedRole) {
-      throw new Error(El usuario no pertenece al perfil )
+      throw new Error(`El usuario no pertenece al perfil ${selectedRole}`)
     }
 
     const authenticatedUser: AuthUser = { ...payload }
