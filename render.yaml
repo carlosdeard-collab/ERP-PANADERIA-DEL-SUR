@@ -12,4 +12,4 @@
       - key: DATABASE_URL
         sync: false
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: "https://frontend-lake-omega-46.vercel.app"
