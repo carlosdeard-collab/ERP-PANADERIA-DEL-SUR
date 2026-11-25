@@ -965,7 +965,7 @@ function PointOfSaleView({
                     </div>
                   </article>
                 ))}
-                {lines.length === 0 && <div className="ticket-empty"><ShoppingCart size={25} /><p>Agrega productos para iniciar la comanda.</p></div>}
+                {lines.length === 0 && <div className="ticket-empty"><ShoppingCart size={25} /><p>Agrega productos desde el catálogo.</p></div>}
               </div>
               <div className="ticket-total"><span>Total</span><strong>{copCurrency.format(total)}</strong></div>
               <div className="ticket-actions">
