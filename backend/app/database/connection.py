@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.core.config import settings
@@ -16,9 +16,12 @@ if url.startswith("sqlite:///"):
     db_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"sqlite:///{db_path.as_posix()}"
 
+is_sqlite = url.startswith("sqlite")
 engine = create_engine(
     url,
-    connect_args={"check_same_thread": False} if url.startswith("sqlite") else {}
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    pool_pre_ping=not is_sqlite,
+    pool_recycle=280 if not is_sqlite else -1,
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
