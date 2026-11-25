@@ -1183,7 +1183,7 @@ function LoginScreen() {
       <section className="login-card">
         <div className="login-brand">
           <div className="brand-mark">M</div>
-          <div><small>ERP ARTESANAL</small><strong>Panadería MAFE</strong></div>
+          <div><small>SISTEMA DE GESTIÓN</small><strong>Panadería MAFE</strong></div>
         </div>
         <h1>Iniciar sesión</h1>
         <p className="login-subtitle">Tu negocio, listo para un nuevo día.</p>
