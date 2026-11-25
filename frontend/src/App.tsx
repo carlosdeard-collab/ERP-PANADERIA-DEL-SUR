@@ -765,9 +765,12 @@ function PointOfSaleView({
   })
 
   const chooseTable = async (value: string) => {
+    if (counterLines.length > 0) {
+      setError('Elimina los productos del ticket para habilitar la opción de abrir mesa.')
+      return
+    }
     setTableId(value)
     setSale(null)
-    setCounterLines([])
     setError('')
     if (!value) return
     try {
@@ -994,7 +997,25 @@ function PointOfSaleView({
           <div className="service-selector">
             <span>Tipo de atención</span>
             <button type="button" className={serviceType === 'mostrador' ? 'selected' : ''} onClick={() => { setServiceType('mostrador'); setSale(null); setTableId('') }}>Mostrador</button>
-            <button type="button" className={serviceType === 'mesa' ? 'selected' : ''} onClick={() => setServiceType('mesa')}>Mesa</button>
+            <button
+              type="button"
+              className={serviceType === 'mesa' ? 'selected' : ''}
+              disabled={serviceType !== 'mesa' && counterLines.length > 0}
+              aria-describedby={serviceType !== 'mesa' && counterLines.length > 0 ? 'open-table-disabled-help' : undefined}
+              onClick={() => {
+                if (counterLines.length > 0) {
+                  setError('Elimina los productos del ticket para habilitar la opción de abrir mesa.')
+                  return
+                }
+                setError('')
+                setServiceType('mesa')
+              }}
+            >Mesa</button>
+            {serviceType === 'mostrador' && counterLines.length > 0 && (
+              <span className="table-open-hint" id="open-table-disabled-help">
+                Elimina los productos del ticket para habilitar Abrir mesa.
+              </span>
+            )}
             {serviceType === 'mesa' && (
               <select value={tableId} onChange={(event) => void chooseTable(event.target.value)}>
                 <option value="">Seleccionar mesa</option>

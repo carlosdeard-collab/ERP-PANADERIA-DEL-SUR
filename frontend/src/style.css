@@ -225,6 +225,8 @@ th { color: #718078; font-size: 12px; }
   padding: 8px 13px; color: #536159; cursor: pointer;
 }
 .service-selector > button.selected { border-color: #477a5b; background: #edf6f0; color: #315f4b; font-weight: 700; }
+.service-selector > button:disabled { cursor: not-allowed; opacity: .48; }
+.service-selector .table-open-hint { flex-basis: 100%; margin-left: 4px; color: var(--muted); font-size: 12px; }
 .service-selector select { height: 37px; border: 1px solid #dce4e0; border-radius: 8px; padding: 0 10px; background: white; }
 .active-ticket { margin-left: auto; color: #39704d; font-size: 12px; font-weight: 700; }
 .pos-columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(330px, .8fr); gap: 17px; align-items: start; }
