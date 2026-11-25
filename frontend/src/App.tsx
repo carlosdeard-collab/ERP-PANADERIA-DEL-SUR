@@ -595,9 +595,9 @@ function TablesView({
     }
   }
 
-  const activeCount = tables.filter((table) => table.activa).length
-  const inactiveCount = tables.length - activeCount
-  const visibleTables = tables.filter((table) => table.activa || (isAdmin && showInactive))
+  const activeCount = tables.filter((table) => table.activa === true).length
+  const inactiveCount = tables.filter((table) => table.activa === false).length
+  const visibleTables = tables.filter((table) => table.activa === true || (isAdmin && showInactive && table.activa === false))
 
   return (
     <div className="tables-view">
@@ -616,13 +616,16 @@ function TablesView({
           <div className="table-counts"><span>{activeCount} activas</span><span>{inactiveCount} inactivas</span></div>
         </div>
       )}
+      {isAdmin && showInactive && inactiveCount === 0 && (
+        <p className="table-empty-inactive">No hay mesas inactivas registradas en la base de datos actual.</p>
+      )}
       <div className="tables-grid">
         {visibleTables.map((table) => (
-          <article className={`table-card ${table.estado} ${table.activa ? '' : 'inactiva'}`} key={table.id}>
+          <article className={`table-card ${table.estado} ${table.activa === false ? 'inactiva' : ''}`} key={table.id}>
             <div className="table-card-top">
               <span className="table-number">{table.numero}</span>
               <span className={`table-status ${table.estado}`}>{table.estado === 'libre' ? 'Libre' : 'Ocupada'}</span>
-              {isAdmin && <span className={`table-active-status ${table.activa ? 'active' : 'inactive'}`}>{table.activa ? 'Activa' : 'Inactiva'}</span>}
+              {isAdmin && <span className={`table-active-status ${table.activa === false ? 'inactive' : 'active'}`}>{table.activa === false ? 'Inactiva' : 'Activa'}</span>}
             </div>
             <h3>{table.nombre}</h3>
             <p className="table-capacity"><Users size={15} /> Capacidad {table.capacidad}</p>
@@ -635,13 +638,13 @@ function TablesView({
                   <button type="button" className="charge-table" onClick={() => void operate(table, true)}>Cobrar</button>
                 </div>
               </>
-            ) : table.activa ? (
+            ) : table.activa === true ? (
               <button type="button" className="open-table" onClick={() => void operate(table)}>Abrir mesa</button>
             ) : <p className="table-inactive-hint">No disponible para pedidos</p>}
             {isAdmin && (
               <div className="table-admin-actions">
-                <button type="button" className={table.activa ? 'deactivate-table' : 'activate-table'} disabled={table.activa && table.estado === 'ocupada'} onClick={() => void toggleTableActive(table)}>
-                  {table.activa ? 'Desactivar' : 'Activar'}
+                <button type="button" className={table.activa === false ? 'activate-table' : 'deactivate-table'} disabled={table.activa !== false && table.estado === 'ocupada'} onClick={() => void toggleTableActive(table)}>
+                  {table.activa === false ? 'Activar' : 'Desactivar'}
                 </button>
                 <button type="button" className="table-edit" onClick={() => editTable(table)}>Editar</button>
                 <button type="button" className="delete-table" onClick={() => { setDeleteError(''); setDeleteTarget(table) }}><Trash2 size={15} /> Eliminar</button>

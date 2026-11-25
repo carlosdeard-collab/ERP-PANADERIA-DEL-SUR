@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_admin
 from app.database.connection import get_db
@@ -34,10 +34,14 @@ def find_open_sale(db: Session, table_id: int) -> Venta | None:
 
 @router.get("", response_model=list[MesaResponse])
 def list_tables(
+    incluir_inactivas: bool = Query(default=False),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    tables = db.query(Mesa).filter(Mesa.activa.is_(True)).order_by(Mesa.numero).all()
+    query = db.query(Mesa)
+    if not incluir_inactivas:
+        query = query.filter(Mesa.activa.is_(True))
+    tables = query.order_by(Mesa.numero, Mesa.nombre).all()
     return [serialize_table(table, find_open_sale(db, table.id)) for table in tables]
 
 
@@ -68,8 +72,11 @@ def update_table(
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
     sale = find_open_sale(db, table.id)
     if sale and data.activa is False:
-        raise HTTPException(status_code=409, detail="No se puede desactivar una mesa con una venta abierta")
-    changes = data.model_dump(exclude_unset=True)
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede desactivar una mesa con un pedido abierto",
+        )
+    changes = data.model_dump(exclude_unset=True, exclude_none=True)
     if changes.get("numero") is not None:
         duplicate = db.query(Mesa).filter(
             Mesa.numero == changes["numero"], Mesa.id != table.id
@@ -81,3 +88,26 @@ def update_table(
     db.commit()
     db.refresh(table)
     return serialize_table(table, sale)
+
+
+@router.delete("/{table_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_table(
+    table_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    table = db.query(Mesa).filter_by(id=table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    if find_open_sale(db, table.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cierra o cobra el pedido activo antes de eliminar esta mesa",
+        )
+
+    db.query(Venta).filter(Venta.mesa_id == table.id).update(
+        {Venta.mesa_id: None},
+        synchronize_session=False,
+    )
+    db.delete(table)
+    db.commit()

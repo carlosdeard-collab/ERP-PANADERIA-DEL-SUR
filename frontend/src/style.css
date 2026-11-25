@@ -2436,6 +2436,12 @@ tbody tr:hover td {
   gap: 7px;
 }
 
+.table-empty-inactive {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .table-card-top {
   flex-wrap: wrap;
   gap: 7px;
