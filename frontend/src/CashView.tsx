@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from './services/api'
+import { printElementById } from './services/print'
 
 interface CashClose {
   id: number
@@ -33,7 +34,7 @@ function CashReceipt({ cashClose }: { cashClose: CashClose }) {
   const difference = cashClose.diferencia ?? 0
   const balanced = Math.abs(difference) < 0.005
   return (
-    <div className="cash-receipt-print">
+    <div className="cash-receipt-print" id="cash-receipt-print">
       <div className="cash-receipt-header">
         <strong>ERP PANADERÍA</strong>
         <span>Comprobante de cierre de caja</span>
@@ -137,6 +138,11 @@ export default function CashView({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  const printCashReceipt = () => {
+    setError('')
+    printElementById('cash-receipt-print', setError)
+  }
+
   const difference = activeCash ? countedCash - activeCash.efectivo_esperado : 0
   const isBalanced = Math.abs(difference) < 0.005
 
@@ -234,7 +240,7 @@ export default function CashView({ isAdmin }: { isAdmin: boolean }) {
           <section className="modal cash-receipt-modal">
             <button type="button" className="modal-close" aria-label="Cerrar comprobante" onClick={() => setReceipt(null)}>×</button>
             <CashReceipt cashClose={receipt} />
-            <div className="modal-actions"><button type="button" className="primary-button" onClick={() => window.print()}>Imprimir comprobante</button><button type="button" onClick={() => setReceipt(null)}>Cerrar</button></div>
+            <div className="modal-actions"><button type="button" className="primary-button" onClick={printCashReceipt}>Imprimir comprobante</button><button type="button" onClick={() => setReceipt(null)}>Cerrar</button></div>
           </section>
         </div>
       )}

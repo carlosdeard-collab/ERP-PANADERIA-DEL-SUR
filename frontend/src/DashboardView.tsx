@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Banknote, Boxes, Receipt } from 'lucide-react'
 import { api, downloadFile } from './services/api'
 
 type Preset = 'hoy' | 'siete' | 'mes' | 'personalizado'
@@ -12,6 +13,11 @@ interface PaymentSummary {
   metodo_pago: string
   monto: number
   porcentaje: number
+}
+
+interface ActiveCashSummary {
+  consecutivo: string
+  efectivo_esperado: number
 }
 
 interface TopProduct {
@@ -158,6 +164,7 @@ export default function DashboardView({ onNavigate }: { onNavigate: (view: strin
   const [startDate, setStartDate] = useState(localDate)
   const [endDate, setEndDate] = useState(localDate)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [activeCash, setActiveCash] = useState<ActiveCashSummary | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
@@ -167,7 +174,12 @@ export default function DashboardView({ onNavigate }: { onNavigate: (view: strin
     setLoading(true)
     try {
       const params = new URLSearchParams({ fecha_inicio: startDate, fecha_fin: endDate })
-      setSummary(await api<DashboardSummary>(`/api/dashboard/resumen?${params.toString()}`))
+      const [dashboard, cash] = await Promise.all([
+        api<DashboardSummary>(`/api/dashboard/resumen?${params.toString()}`),
+        api<ActiveCashSummary | null>('/api/caja/activa'),
+      ])
+      setSummary(dashboard)
+      setActiveCash(cash)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible cargar el resumen ejecutivo')
     } finally {
@@ -245,10 +257,34 @@ export default function DashboardView({ onNavigate }: { onNavigate: (view: strin
       {loading && !summary ? <div className="dashboard-loading">Cargando indicadores...</div> : summary && (
         <>
           <div className={`dashboard-kpis ${loading ? 'refreshing' : ''}`}>
-            <article><span>Ventas Totales</span><strong>{money.format(summary.ventas_totales)}</strong><small>{summary.cantidad_tickets} tickets · promedio {money.format(summary.ticket_promedio)}</small></article>
-            <article><span>Costo de Ventas</span><strong>{money.format(summary.costo_vendido)}</strong><small>Costo estimado de productos vendidos</small></article>
-            <article><span>Gastos Operativos</span><strong>{money.format(summary.gastos_operativos)}</strong><small>Gastos vigentes del periodo</small></article>
-            <article className={summary.utilidad_neta_estimada >= 0 ? 'positive' : 'negative'}><span>Utilidad Neta Estimada</span><strong>{money.format(summary.utilidad_neta_estimada)}</strong><small>Margen neto {summary.margen_neto.toFixed(1)}%</small></article>
+            <article>
+              <div className="dashboard-kpi-label"><span>{preset === 'hoy' ? 'Ventas del día' : 'Ventas del periodo'}</span><Banknote size={19} aria-hidden="true" /></div>
+              <strong>{money.format(summary.ventas_totales)}</strong>
+              <small>{summary.cantidad_tickets} tickets · promedio {money.format(summary.ticket_promedio)}</small>
+            </article>
+            <article>
+              <div className="dashboard-kpi-label"><span>Gastos operativos</span><Receipt size={19} aria-hidden="true" /></div>
+              <strong>{money.format(summary.gastos_operativos)}</strong>
+              <small>Gastos vigentes del periodo</small>
+            </article>
+            <article>
+              <div className="dashboard-kpi-label"><span>Balance en caja</span><Banknote size={19} aria-hidden="true" /></div>
+              <strong>{money.format(activeCash?.efectivo_esperado ?? 0)}</strong>
+              <small>{activeCash ? `Turno ${activeCash.consecutivo} · efectivo esperado` : 'Sin turno de caja abierto'}</small>
+            </article>
+            <article>
+              <div className="dashboard-kpi-label"><span>Alertas de stock mínimo</span><Boxes size={19} aria-hidden="true" /></div>
+              <strong>{summary.alertas.materias_primas_bajas.length + summary.alertas.productos_agotados.length}</strong>
+              <small>{summary.alertas.materias_primas_bajas.length} insumos bajos · {summary.alertas.productos_agotados.length} productos agotados</small>
+            </article>
+          </div>
+          <div className="dashboard-financial-strip">
+            <article><span>Costo estimado de ventas</span><strong>{money.format(summary.costo_vendido)}</strong></article>
+            <article className={summary.utilidad_neta_estimada >= 0 ? 'positive' : 'negative'}>
+              <span>Utilidad neta estimada</span>
+              <strong>{money.format(summary.utilidad_neta_estimada)}</strong>
+              <small>Margen neto {summary.margen_neto.toFixed(1)}%</small>
+            </article>
           </div>
 
           <div className="dashboard-charts-grid">

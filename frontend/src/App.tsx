@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type Role } from './AuthContext'
-import { Banknote, BarChart3, Boxes, ChefHat, Clock3, LogOut, Menu as MenuIcon, Minus, Package, Plus, Printer, Receipt, ShoppingCart, Table, Users, X } from 'lucide-react'
+import { Banknote, BarChart3, Boxes, ChefHat, Clock3, Eye, EyeOff, LogOut, Menu as MenuIcon, Minus, Package, PanelLeftClose, PanelLeftOpen, Plus, Printer, Receipt, ShoppingCart, Table, Users, X } from 'lucide-react'
 import { api } from './services/api'
+import { printElementById } from './services/print'
 import CashView from './CashView'
 import DashboardView from './DashboardView'
 import ExpensesView from './ExpensesView'
@@ -236,6 +237,21 @@ const copCurrency = new Intl.NumberFormat('es-CO', {
   currency: 'COP',
   maximumFractionDigits: 0,
 })
+
+const receiptBusiness = {
+  name: import.meta.env.VITE_RECEIPT_BUSINESS_NAME?.trim() || 'Panadería MAFE',
+  nit: import.meta.env.VITE_RECEIPT_NIT?.trim() || '',
+  address: import.meta.env.VITE_RECEIPT_ADDRESS?.trim() || '',
+  phone: import.meta.env.VITE_RECEIPT_PHONE?.trim() || '',
+}
+
+const paymentMethodLabels: Record<string, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  nequi: 'Nequi',
+  daviplata: 'Daviplata',
+  tarjeta: 'Tarjeta',
+}
 
 function CatalogView() {
   const [products, setProducts] = useState<Product[]>([])
@@ -846,6 +862,10 @@ function PointOfSaleView({
   }
 
   const change = Math.max(0, Number(amountReceived || 0) - total)
+  const printSaleReceipt = () => {
+    setError('')
+    printElementById('sale-receipt-print', setError)
+  }
 
   return (
     <div className="pos-view">
@@ -978,7 +998,7 @@ function PointOfSaleView({
           <div className="receipt-modal">
             <button type="button" className="modal-close receipt-close" aria-label="Cerrar comprobante" onClick={() => setReceipt(null)}><X size={18} /></button>
             <ReceiptPrint receipt={receipt} />
-            <div className="receipt-actions"><button type="button" className="primary-button" onClick={() => window.print()}><Printer size={16} /> Imprimir comprobante</button><button type="button" className="secondary-button" onClick={() => setReceipt(null)}>Cerrar</button></div>
+            <div className="receipt-actions"><button type="button" className="primary-button" onClick={printSaleReceipt}><Printer size={16} /> Imprimir comprobante</button><button type="button" className="secondary-button" onClick={() => setReceipt(null)}>Cerrar</button></div>
           </div>
         </div>
       )}
@@ -988,22 +1008,40 @@ function PointOfSaleView({
 
 function ReceiptPrint({ receipt }: { receipt: SaleRecord }) {
   const payment = receipt.pagos[receipt.pagos.length - 1]
+  const saleDate = receipt.cerrada_en || payment?.registrado_en || receipt.creada_en
   return (
-    <div className="receipt-print">
-      <div className="receipt-header"><div className="receipt-logo">P</div><h2>ERP Panadería</h2><p>Comprobante interno — no válido como factura electrónica</p></div>
+    <div className="receipt-print" id="sale-receipt-print">
+      <div className="receipt-header">
+        <div className="receipt-logo">P</div>
+        <h2>{receiptBusiness.name}</h2>
+        <div className="receipt-business-details">
+          {receiptBusiness.nit && <div>NIT: {receiptBusiness.nit}</div>}
+          {receiptBusiness.address && <div>{receiptBusiness.address}</div>}
+          {receiptBusiness.phone && <div>Tel: {receiptBusiness.phone}</div>}
+        </div>
+        <p>Comprobante interno — no válido como factura electrónica</p>
+      </div>
       <div className="receipt-meta">
         <div><span>Consecutivo</span><strong>{receipt.consecutivo}</strong></div>
-        <div><span>Fecha</span><strong>{new Date(receipt.creada_en).toLocaleString('es-CO')}</strong></div>
+        <div><span>Fecha y hora</span><strong>{new Date(saleDate).toLocaleString('es-CO')}</strong></div>
         <div><span>Atendió</span><strong>{receipt.usuario_nombre}</strong></div>
-        <div><span>Atención</span><strong>{receipt.mesa_nombre || 'Mostrador'}</strong></div>
+        <div><span>Pedido</span><strong>{receipt.tipo_atencion === 'mesa' ? receipt.mesa_nombre || 'Mesa' : 'Llevar / mostrador'}</strong></div>
       </div>
       <table className="receipt-items">
-        <thead><tr><th>Producto</th><th>Cant.</th><th>Valor</th></tr></thead>
-        <tbody>{receipt.detalles.map((item) => <tr key={item.id}><td>{item.nombre}{item.notas && <small>{item.notas}</small>}</td><td>{item.cantidad}</td><td>{copCurrency.format(item.subtotal)}</td></tr>)}</tbody>
+        <thead><tr><th className="receipt-qty">Cant.</th><th className="receipt-product">Producto / unitario</th><th className="receipt-amount">Subtotal</th></tr></thead>
+        <tbody>{receipt.detalles.map((item) => (
+          <tr key={item.id}>
+            <td className="receipt-qty">{item.cantidad}</td>
+            <td className="receipt-product">{item.nombre}<small>{copCurrency.format(item.precio_unitario)} c/u</small>{item.notas && <small>{item.notas}</small>}</td>
+            <td className="receipt-amount">{copCurrency.format(item.subtotal)}</td>
+          </tr>
+        ))}</tbody>
       </table>
-      <div className="receipt-total"><span>Total</span><strong>{copCurrency.format(receipt.total)}</strong></div>
+      <div className="receipt-subtotal"><span>Subtotal</span><strong>{copCurrency.format(receipt.subtotal)}</strong></div>
+      {receipt.descuento > 0 && <div className="receipt-subtotal"><span>Descuento</span><strong>- {copCurrency.format(receipt.descuento)}</strong></div>}
+      <div className="receipt-total"><span>Total pagado</span><strong>{copCurrency.format(receipt.total)}</strong></div>
       {payment && <div className="receipt-payment">
-        <div><span>Medio de pago</span><strong>{payment.metodo_pago}</strong></div>
+        <div><span>Medio de pago</span><strong>{paymentMethodLabels[payment.metodo_pago] || payment.metodo_pago}</strong></div>
         <div><span>Recibido</span><strong>{copCurrency.format(payment.monto_recibido)}</strong></div>
         <div><span>Cambio</span><strong>{copCurrency.format(payment.cambio)}</strong></div>
       </div>}
@@ -1017,6 +1055,7 @@ function LoginScreen() {
   const [selectedRole, setSelectedRole] = useState<Role>('administradora')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -1037,20 +1076,20 @@ function LoginScreen() {
     <main className="login-page">
       <section className="login-card">
         <div className="login-brand">
-          <div className="brand-mark">P</div>
-          <div><small>ERP</small><strong>Panadería</strong></div>
+          <div className="brand-mark">M</div>
+          <div><small>ERP ARTESANAL</small><strong>Panadería MAFE</strong></div>
         </div>
         <h1>Iniciar sesión</h1>
-        <p className="login-subtitle">Selecciona tu perfil para continuar</p>
+        <p className="login-subtitle">Tu negocio, listo para un nuevo día.</p>
 
         <div className="profile-grid">
-          <button type="button" className={selectedRole === 'administradora' ? 'profile-card active' : 'profile-card'} onClick={() => setSelectedRole('administradora')}>
-            <span className="profile-icon">A</span>
+          <button type="button" aria-pressed={selectedRole === 'administradora'} className={selectedRole === 'administradora' ? 'profile-card active' : 'profile-card'} onClick={() => setSelectedRole('administradora')}>
+            <span className="profile-icon"><BarChart3 size={19} /></span>
             <strong>Administradora</strong>
             <small>Control completo del negocio</small>
           </button>
-          <button type="button" className={selectedRole === 'mesera' ? 'profile-card active' : 'profile-card'} onClick={() => setSelectedRole('mesera')}>
-            <span className="profile-icon">M</span>
+          <button type="button" aria-pressed={selectedRole === 'mesera'} className={selectedRole === 'mesera' ? 'profile-card active' : 'profile-card'} onClick={() => setSelectedRole('mesera')}>
+            <span className="profile-icon"><ShoppingCart size={19} /></span>
             <strong>Mesera</strong>
             <small>Pedidos, mesas y ventas</small>
           </button>
@@ -1061,10 +1100,18 @@ function LoginScreen() {
             <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" minLength={3} required />
           </label>
           <label>Contraseña
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" minLength={8} required />
+            <span className="password-field">
+              <input type={passwordVisible ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" minLength={8} required />
+              <button type="button" className="password-toggle" aria-label={passwordVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={passwordVisible} onClick={() => setPasswordVisible((visible) => !visible)}>
+                {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </span>
           </label>
-          {error && <div className="error-message">{error}</div>}
-          <button className="login-button" type="submit" disabled={loading}>{loading ? 'Ingresando...' : 'Ingresar al sistema'}</button>
+          {error && <div className="error-message" role="alert">{error}</div>}
+          <button className="login-button" type="submit" disabled={loading}>
+            {loading && <span className="loading-spinner" aria-hidden="true" />}
+            {loading ? 'Validando acceso...' : 'Ingresar al sistema'}
+          </button>
         </form>
       </section>
     </main>
@@ -1077,6 +1124,7 @@ export default function App() {
   const [activeSaleId, setActiveSaleId] = useState<number | null>(null)
   const [chargeOnOpen, setChargeOnOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -1129,26 +1177,33 @@ export default function App() {
   }
 
   return (
-    <main className="shell">
+    <main className={`shell${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
       <div className="mobile-topbar">
         <button type="button" className="mobile-menu-button" aria-label="Abrir menú" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}><MenuIcon size={22} /></button>
         <strong className="mobile-page-title">{currentView}</strong>
         <button type="button" className="mobile-logout-button" aria-label="Cerrar sesión" onClick={logout}><LogOut size={18} /></button>
       </div>
       {drawerOpen && <button type="button" className="mobile-drawer-backdrop" aria-label="Cerrar menú" onClick={() => setDrawerOpen(false)} />}
-      <aside className={drawerOpen ? 'sidebar drawer-open' : 'sidebar'}>
-        <div className="brand">ERP <b>Panadería</b></div>
+      <aside className={`sidebar${drawerOpen ? ' drawer-open' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+        <div className="brand">
+          <span className="sidebar-brand-mark">M</span>
+          <span className="brand-name">Panadería <b>MAFE</b></span>
+          <button type="button" className="sidebar-collapse-button" aria-label={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>
+            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
         <nav>
           {menu.map(({ label, icon: Icon }) => (
-            <button key={label} type="button" className={currentView === label ? 'active' : ''} onClick={() => navigateTo(label)}>
-              <Icon size={18} /> {label}
+            <button key={label} type="button" title={sidebarCollapsed ? label : undefined} aria-current={currentView === label ? 'page' : undefined} className={currentView === label ? 'active' : ''} onClick={() => navigateTo(label)}>
+              <Icon size={19} /> <span className="nav-label">{label}</span>
             </button>
           ))}
         </nav>
         <div className="sidebar-user">
           <div className="avatar">{user.nombre.charAt(0).toUpperCase()}</div>
-          <div><strong>{user.nombre}</strong><small>{user.rol}</small></div>
+          <div className="sidebar-user-copy"><strong>{user.nombre}</strong><small>{user.rol === 'administradora' ? 'Administradora' : 'Mesera'}</small></div>
         </div>
+        <button type="button" className="sidebar-logout" onClick={logout} title={sidebarCollapsed ? 'Cerrar sesión' : undefined}><LogOut size={18} /><span>Cerrar sesión</span></button>
       </aside>
       <section className="content">
         <header>
@@ -1202,8 +1257,11 @@ export default function App() {
       </section>
       {(user.rol === 'mesera' || user.rol === 'administradora') && (
         <nav className="mobile-quickbar" aria-label="Accesos rápidos">
+          {user.rol === 'administradora' && <button type="button" className={currentView === 'Resumen' ? 'active' : ''} onClick={() => navigateTo('Resumen')}><BarChart3 size={19} /><span>Resumen</span></button>}
           <button type="button" className={currentView === 'Mesas' ? 'active' : ''} onClick={() => navigateTo('Mesas')}><Table size={19} /><span>Mesas</span></button>
-          <button type="button" className={currentView === 'Ventas POS' ? 'active' : ''} onClick={() => navigateTo('Ventas POS')}><ShoppingCart size={19} /><span>Ventas POS</span></button>
+          <button type="button" className={currentView === 'Ventas POS' ? 'active' : ''} onClick={() => navigateTo('Ventas POS')}><ShoppingCart size={19} /><span>POS</span></button>
+          <button type="button" className={currentView === 'Caja' ? 'active' : ''} onClick={() => navigateTo('Caja')}><Banknote size={19} /><span>Caja</span></button>
+          <button type="button" className="mobile-more-button" aria-label="Abrir menú de módulos" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><MenuIcon size={19} /><span>Más</span></button>
         </nav>
       )}
     </main>
