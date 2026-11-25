@@ -503,7 +503,7 @@ function TablesView({
   const [manage, setManage] = useState(false)
   const [editing, setEditing] = useState<TableRecord | null>(null)
   const [form, setForm] = useState({ numero: 1, nombre: 'Mesa 1', capacidad: 4, activa: true })
-  const [showInactive, setShowInactive] = useState(false)
+  const [showInactive, setShowInactive] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<TableRecord | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
