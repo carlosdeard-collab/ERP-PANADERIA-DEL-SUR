@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type Role } from './AuthContext'
-import { Banknote, BarChart3, Boxes, ChefHat, Clock3, Eye, EyeOff, LogOut, Menu as MenuIcon, Minus, Package, PanelLeftClose, PanelLeftOpen, Plus, Printer, Receipt, ShoppingCart, Table, Users, X } from 'lucide-react'
+import { Banknote, BarChart3, Boxes, ChefHat, Clock3, Eye, EyeOff, LogOut, Menu as MenuIcon, Minus, Package, PanelLeftClose, PanelLeftOpen, Plus, Printer, Receipt, ShoppingCart, Table, Trash2, Users, X } from 'lucide-react'
 import { api } from './services/api'
 import { printElementById } from './services/print'
 import CashView from './CashView'
@@ -499,18 +499,24 @@ function TablesView({
 }) {
   const [tables, setTables] = useState<TableRecord[]>([])
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [manage, setManage] = useState(false)
   const [editing, setEditing] = useState<TableRecord | null>(null)
   const [form, setForm] = useState({ numero: 1, nombre: 'Mesa 1', capacidad: 4, activa: true })
+  const [showInactive, setShowInactive] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<TableRecord | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const loadTables = async () => {
-    try {
-      setTables(await api<TableRecord[]>('/api/mesas'))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No fue posible cargar las mesas')
-    }
+    const query = isAdmin ? '?incluir_inactivas=true' : ''
+    setTables(await api<TableRecord[]>(`/api/mesas${query}`))
   }
-  useEffect(() => { void loadTables() }, [])
+  useEffect(() => {
+    void loadTables().catch((cause) => {
+      setError(cause instanceof Error ? cause.message : 'No fue posible cargar las mesas')
+    })
+  }, [isAdmin])
 
   const operate = async (table: TableRecord, chargeNow = false) => {
     setError('')
@@ -540,6 +546,7 @@ function TablesView({
   const saveTable = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
+    setNotice('')
     try {
       await api<TableRecord>(editing ? `/api/mesas/${editing.id}` : '/api/mesas', {
         method: editing ? 'PUT' : 'POST',
@@ -552,23 +559,74 @@ function TablesView({
     }
   }
 
+  const toggleTableActive = async (table: TableRecord) => {
+    setError('')
+    setNotice('')
+    try {
+      await api<TableRecord>(`/api/mesas/${table.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ activa: !table.activa }),
+      })
+      await loadTables()
+      setNotice(`${table.nombre} ${table.activa ? 'desactivada' : 'activada'}.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible actualizar la mesa')
+    }
+  }
+
+  const deleteTable = async () => {
+    if (!deleteTarget) return
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      await api<void>(`/api/mesas/${deleteTarget.id}`, { method: 'DELETE' })
+      const deletedName = deleteTarget.nombre
+      setDeleteTarget(null)
+      setNotice(`${deletedName} eliminada.`)
+      try {
+        await loadTables()
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'La mesa se eliminó, pero no se pudo actualizar la lista')
+      }
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'No fue posible eliminar la mesa')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const activeCount = tables.filter((table) => table.activa).length
+  const inactiveCount = tables.length - activeCount
+  const visibleTables = tables.filter((table) => table.activa || (isAdmin && showInactive))
+
   return (
     <div className="tables-view">
       {error && <div className="error-message">{error}</div>}
+      {notice && <div className="success-message">{notice}</div>}
       <div className="operation-heading">
         <div><h2>Mesas</h2><p>Consulta la ocupación y el consumo de cada mesa.</p></div>
         {isAdmin && <button type="button" className="primary-button" onClick={openNewTable}>+ Crear mesa</button>}
       </div>
+      {isAdmin && (
+        <div className="table-management-toolbar">
+          <label className="table-inactive-filter">
+            <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
+            Mostrar mesas inactivas <span>{inactiveCount}</span>
+          </label>
+          <div className="table-counts"><span>{activeCount} activas</span><span>{inactiveCount} inactivas</span></div>
+        </div>
+      )}
       <div className="tables-grid">
-        {tables.map((table) => (
-          <article className={`table-card ${table.estado}`} key={table.id}>
+        {visibleTables.map((table) => (
+          <article className={`table-card ${table.estado} ${table.activa ? '' : 'inactiva'}`} key={table.id}>
             <div className="table-card-top">
               <span className="table-number">{table.numero}</span>
               <span className={`table-status ${table.estado}`}>{table.estado === 'libre' ? 'Libre' : 'Ocupada'}</span>
+              {isAdmin && <span className={`table-active-status ${table.activa ? 'active' : 'inactive'}`}>{table.activa ? 'Activa' : 'Inactiva'}</span>}
             </div>
             <h3>{table.nombre}</h3>
             <p className="table-capacity"><Users size={15} /> Capacidad {table.capacidad}</p>
-            {table.estado === 'ocupada' ? (
+            {table.activa && table.estado === 'ocupada' ? (
               <>
                 <strong className="table-total">{copCurrency.format(table.venta_total || 0)}</strong>
                 {table.abierta_en && <small className="table-open-time"><Clock3 size={13} /> Desde {new Date(table.abierta_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</small>}
@@ -577,13 +635,21 @@ function TablesView({
                   <button type="button" className="charge-table" onClick={() => void operate(table, true)}>Cobrar</button>
                 </div>
               </>
-            ) : (
+            ) : table.activa ? (
               <button type="button" className="open-table" onClick={() => void operate(table)}>Abrir mesa</button>
+            ) : <p className="table-inactive-hint">No disponible para pedidos</p>}
+            {isAdmin && (
+              <div className="table-admin-actions">
+                <button type="button" className={table.activa ? 'deactivate-table' : 'activate-table'} disabled={table.activa && table.estado === 'ocupada'} onClick={() => void toggleTableActive(table)}>
+                  {table.activa ? 'Desactivar' : 'Activar'}
+                </button>
+                <button type="button" className="table-edit" onClick={() => editTable(table)}>Editar</button>
+                <button type="button" className="delete-table" onClick={() => { setDeleteError(''); setDeleteTarget(table) }}><Trash2 size={15} /> Eliminar</button>
+              </div>
             )}
-            {isAdmin && <button type="button" className="table-edit" onClick={() => editTable(table)}>Editar mesa</button>}
           </article>
         ))}
-        {tables.length === 0 && <div className="empty-panel">No hay mesas activas.</div>}
+        {visibleTables.length === 0 && <div className="empty-panel">{showInactive ? 'No hay mesas registradas.' : 'No hay mesas activas.'}</div>}
       </div>
 
       {manage && (
@@ -596,6 +662,19 @@ function TablesView({
             {editing && <label className="checkbox-line"><input type="checkbox" checked={form.activa} onChange={(event) => setForm({ ...form, activa: event.target.checked })} /> Mesa activa</label>}
             <div className="modal-actions"><button type="button" onClick={() => setManage(false)}>Cancelar</button><button type="submit" className="primary-button">Guardar</button></div>
           </form>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="modal-backdrop">
+          <section className="modal table-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-table-title">
+            <h2 id="delete-table-title">Eliminar mesa</h2>
+            <p>¿Estás seguro de eliminar la {deleteTarget.nombre}? Esta acción no se puede deshacer.</p>
+            {deleteError && <div className="error-message">{deleteError}</div>}
+            <div className="modal-actions">
+              <button type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>Cancelar</button>
+              <button type="button" className="danger-button" disabled={deleting} onClick={() => void deleteTable()}>{deleting ? 'Eliminando...' : 'Eliminar mesa'}</button>
+            </div>
+          </section>
         </div>
       )}
     </div>
