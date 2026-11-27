@@ -1310,7 +1310,7 @@ function PointOfSaleView({
             </section>
 
             <section className="active-ticket-panel">
-              <div className="ticket-heading"><div><small>COMANDA</small><h2>{serviceType === 'mesa' ? sale?.mesa_nombre || 'Selecciona una mesa' : 'Mostrador'}</h2></div><span>{lines.length} ítems</span></div>
+              <div className="ticket-heading"><div><small>PEDIDO</small><h2>{serviceType === 'mesa' ? sale?.mesa_nombre || 'Selecciona una mesa' : 'Mostrador'}</h2></div><span>{lines.length} producto(s)</span></div>
               <div className="ticket-lines">
                 {lines.map((line) => (
                   <article className="ticket-line" key={line.id}>
