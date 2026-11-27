@@ -12,6 +12,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.datavalidation import DataValidation
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_admin
 from app.database.connection import get_db
@@ -381,7 +382,7 @@ def list_products(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    query = db.query(Producto)
+    query = db.query(Producto).filter(Producto.disponible.is_(True))
     if categoria_id is not None:
         query = query.filter(Producto.categoria_id == categoria_id)
     if buscar:
@@ -468,6 +469,35 @@ def update_product(
     db.commit()
     db.refresh(product)
     return serialize_product(product)
+
+
+@router.delete("/productos/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    product = db.query(Producto).filter_by(id=product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    db.delete(product)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        product = db.query(Producto).filter_by(id=product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        product.disponible = False
+        db.add(Auditoria(
+            event_type="producto_desactivado",
+            actor_id=admin.id,
+            details=f"Producto {product.id} desactivado por tener registros asociados",
+        ))
+        db.commit()
+
+    return None
 
 
 @router.patch("/productos/{product_id}/disponibilidad", response_model=ProductoResponse)

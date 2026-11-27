@@ -384,6 +384,17 @@ function CatalogView() {
     }
   }
 
+  const deleteProduct = async (product: Product) => {
+    if (!window.confirm(`¿Eliminar el producto "${product.nombre}" del catálogo?`)) return
+    setError('')
+    try {
+      await api<void>(`/api/productos/${product.id}`, { method: 'DELETE' })
+      setProducts((current) => current.filter((item) => item.id !== product.id))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible eliminar el producto')
+    }
+  }
+
   const openCategory = (category?: Category) => {
     setEditingCategory(category || null)
     setCategoryForm({
@@ -513,7 +524,10 @@ function CatalogView() {
                   </button>
                   <small className={product.disponible ? 'available-label' : 'unavailable-label'}>{product.disponible ? 'Disponible' : 'No disponible'}</small>
                 </td>
-                <td><button type="button" className="edit-button" onClick={() => openEditProduct(product)}>Editar</button></td>
+                <td className="catalog-product-actions">
+                  <button type="button" className="edit-button" onClick={() => openEditProduct(product)}>Editar</button>
+                  <button type="button" className="delete-product-button" onClick={() => void deleteProduct(product)}>Eliminar</button>
+                </td>
               </tr>
             ))}
             {filteredProducts.length === 0 && <tr><td colSpan={7} className="empty-row">No se encontraron productos.</td></tr>}
