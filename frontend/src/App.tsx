@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type Role } from './AuthContext'
 import { Banknote, BarChart3, Boxes, ChefHat, Clock3, Eye, EyeOff, LogOut, Menu as MenuIcon, Minus, Package, PanelLeftClose, PanelLeftOpen, Plus, Printer, Receipt, ShoppingCart, Table, Trash2, Users, X } from 'lucide-react'
-import { api } from './services/api'
+import { api, downloadFile } from './services/api'
 import { printElementById } from './services/print'
 import CashView from './CashView'
 import DashboardView from './DashboardView'
@@ -221,6 +221,19 @@ interface SaleRecord {
 
 type ProductFormState = Omit<Product, 'id' | 'categoria_nombre' | 'creado_en'>
 
+interface CatalogImportError {
+  fila: number
+  producto: string
+  motivo: string
+}
+
+interface CatalogImportSummary {
+  creados: number
+  actualizados: number
+  omitidos: number
+  errores: CatalogImportError[]
+}
+
 const emptyProduct: ProductFormState = {
   codigo: '',
   nombre: '',
@@ -283,6 +296,12 @@ function CatalogView() {
   const [showCategory, setShowCategory] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [categoryForm, setCategoryForm] = useState({ nombre: '', descripcion: '' })
+  const [showImport, setShowImport] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [updateExisting, setUpdateExisting] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [importSummary, setImportSummary] = useState<CatalogImportSummary | null>(null)
+  const [importError, setImportError] = useState('')
 
   const loadCatalog = async () => {
     try {
@@ -407,6 +426,47 @@ function CatalogView() {
     }
   }
 
+  const openImport = () => {
+    setImportFile(null)
+    setImportSummary(null)
+    setImportError('')
+    setShowImport(true)
+  }
+
+  const downloadImportTemplate = async () => {
+    setImportError('')
+    try {
+      await downloadFile('/catalogo/plantilla-excel', 'plantilla_catalogo.xlsx')
+    } catch (cause) {
+      setImportError(cause instanceof Error ? cause.message : 'No fue posible descargar la plantilla')
+    }
+  }
+
+  const importCatalog = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!importFile) {
+      setImportError('Selecciona un archivo .xlsx para continuar.')
+      return
+    }
+    setImporting(true)
+    setImportError('')
+    setImportSummary(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', importFile)
+      const summary = await api<CatalogImportSummary>(
+        `/catalogo/importar-excel?actualizar_existentes=${updateExisting}`,
+        { method: 'POST', body: formData },
+      )
+      setImportSummary(summary)
+      await loadCatalog()
+    } catch (cause) {
+      setImportError(cause instanceof Error ? cause.message : 'No fue posible importar el archivo')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const lowStock = products.filter((product) => product.controlar_stock && product.stock_actual < 5).length
   const activeCategories = categories.filter((category) => category.activa)
 
@@ -417,6 +477,7 @@ function CatalogView() {
         <div><h2>Catálogo de productos</h2><p>Productos, precios y disponibilidad para la operación diaria.</p></div>
         <div className="catalog-actions">
           <button type="button" className="secondary-button" onClick={() => openCategory()}>Gestionar categorías</button>
+          <button type="button" className="secondary-button" onClick={openImport}>Importar Excel</button>
           <button type="button" className="primary-button" onClick={openNewProduct}>+ Nuevo producto</button>
         </div>
       </div>
@@ -501,6 +562,69 @@ function CatalogView() {
                 </div>
               ))}
             </div>
+          </section>
+        </div>
+      )}
+
+      {showImport && (
+        <div className="modal-backdrop">
+          <section className="modal catalog-import-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-import-title">
+            <button type="button" className="modal-close" aria-label="Cerrar importación" onClick={() => setShowImport(false)}><X size={18} /></button>
+            <h2 id="catalog-import-title">Importar productos desde Excel</h2>
+            <div className="catalog-import-step">
+              <strong>Paso 1 · Descarga la plantilla</strong>
+              <p>Usa la plantilla para conservar los nombres de las columnas requeridas.</p>
+              <button type="button" className="secondary-button" onClick={() => void downloadImportTemplate()}>Descargar plantilla Excel (.xlsx)</button>
+            </div>
+            <form className="catalog-import-form" onSubmit={importCatalog}>
+              <div className="catalog-import-step">
+                <strong>Paso 2 · Selecciona tu archivo</strong>
+                <label>Archivo Excel (.xlsx)
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(event) => {
+                      setImportFile(event.target.files?.[0] || null)
+                      setImportSummary(null)
+                      setImportError('')
+                    }}
+                  />
+                </label>
+                <label className="checkbox-line">
+                  <input type="checkbox" checked={updateExisting} onChange={(event) => setUpdateExisting(event.target.checked)} />
+                  Actualizar datos si el producto ya existe
+                </label>
+              </div>
+              <div className="catalog-import-step">
+                <strong>Paso 3 · Carga productos</strong>
+                {importFile && <p className="catalog-import-filename">{importFile.name}</p>}
+                <button type="submit" className="primary-button" disabled={!importFile || importing}>
+                  {importing ? 'Importando...' : 'Subir y cargar productos'}
+                </button>
+              </div>
+            </form>
+            {importError && <div className="error-message">{importError}</div>}
+            {importSummary && (
+              <div className="catalog-import-results" aria-live="polite">
+                <h3>Resultado de la importación</h3>
+                <div className="catalog-import-counts">
+                  <span><strong>{importSummary.creados}</strong> creados</span>
+                  <span><strong>{importSummary.actualizados}</strong> actualizados</span>
+                  <span><strong>{importSummary.omitidos}</strong> omitidos</span>
+                </div>
+                {importSummary.errores.length > 0 ? (
+                  <div className="catalog-import-errors">
+                    <strong>Filas con errores</strong>
+                    <ul>{importSummary.errores.map((rowError, index) => (
+                      <li key={`${rowError.fila}-${index}`}>
+                        <strong>Fila {rowError.fila}{rowError.producto ? ` · ${rowError.producto}` : ''}:</strong> {rowError.motivo}
+                      </li>
+                    ))}</ul>
+                  </div>
+                ) : <p className="catalog-import-success">Todos los productos se procesaron correctamente.</p>}
+              </div>
+            )}
+            <div className="modal-actions"><button type="button" onClick={() => setShowImport(false)}>Cerrar</button></div>
           </section>
         </div>
       )}
