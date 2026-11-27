@@ -1,4 +1,4 @@
-# ERP Panadería MAFE
+# ERP Panadería PANTOJARTE
 
 ERP web para panadería con ventas POS, mesas, inventario, producción, caja, gastos y reportes. La interfaz funciona en computador y en celulares Android/iOS.
 

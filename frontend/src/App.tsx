@@ -270,7 +270,7 @@ function shiftDate(dateString: string, days: number): string {
 }
 
 const receiptBusiness = {
-  name: import.meta.env.VITE_RECEIPT_BUSINESS_NAME?.trim() || 'Panadería MAFE',
+  name: import.meta.env.VITE_RECEIPT_BUSINESS_NAME?.trim() || 'Panadería PANTOJARTE',
   nit: import.meta.env.VITE_RECEIPT_NIT?.trim() || '',
   address: import.meta.env.VITE_RECEIPT_ADDRESS?.trim() || '',
   phone: import.meta.env.VITE_RECEIPT_PHONE?.trim() || '',
@@ -1441,7 +1441,7 @@ function LoginScreen() {
       <section className="login-card">
         <div className="login-brand">
           <div className="brand-mark">M</div>
-          <div><small>SISTEMA DE GESTIÓN</small><strong>Panadería MAFE</strong></div>
+          <div><small>SISTEMA DE GESTIÓN</small><strong>Panadería PANTOJARTE</strong></div>
         </div>
         <h1>Iniciar sesión</h1>
         <p className="login-subtitle">Tu negocio, listo para un nuevo día.</p>
@@ -1556,7 +1556,7 @@ export default function App() {
       <aside className={`sidebar${drawerOpen ? ' drawer-open' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         <div className="brand">
           <span className="sidebar-brand-mark">M</span>
-          <span className="brand-name">Panadería <b>MAFE</b></span>
+          <span className="brand-name">Panadería <b>PANTOJARTE</b></span>
           <button type="button" className="sidebar-collapse-button" aria-label={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>
             {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
