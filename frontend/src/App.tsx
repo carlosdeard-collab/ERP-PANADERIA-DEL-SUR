@@ -176,6 +176,7 @@ interface TableRecord {
   activa: boolean
   venta_id: number | null
   venta_total: number | null
+  venta_items: number
   abierta_en: string | null
 }
 
@@ -237,6 +238,23 @@ const copCurrency = new Intl.NumberFormat('es-CO', {
   currency: 'COP',
   maximumFractionDigits: 0,
 })
+
+function colombiaDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function shiftDate(dateString: string, days: number): string {
+  const date = new Date(`${dateString}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
 
 const receiptBusiness = {
   name: import.meta.env.VITE_RECEIPT_BUSINESS_NAME?.trim() || 'Panadería MAFE',
@@ -530,6 +548,18 @@ function TablesView({
     }
   }
 
+  const releaseTable = async (table: TableRecord) => {
+    setError('')
+    setNotice('')
+    try {
+      await api<TableRecord>(`/api/mesas/${table.id}/liberar`, { method: 'POST' })
+      await loadTables()
+      setNotice('Mesa liberada')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible liberar la mesa')
+    }
+  }
+
   const openNewTable = () => {
     const number = Math.max(0, ...tables.map((table) => table.numero)) + 1
     setEditing(null)
@@ -635,7 +665,9 @@ function TablesView({
                 {table.abierta_en && <small className="table-open-time"><Clock3 size={13} /> Desde {new Date(table.abierta_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</small>}
                 <div className="table-actions">
                   <button type="button" onClick={() => void operate(table)}>Agregar pedido</button>
-                  <button type="button" className="charge-table" onClick={() => void operate(table, true)}>Cobrar</button>
+                  {table.venta_items === 0
+                    ? <button type="button" className="release-table" onClick={() => void releaseTable(table)}>Liberar mesa</button>
+                    : <button type="button" className="charge-table" onClick={() => void operate(table, true)}>Cobrar</button>}
                 </div>
               </>
             ) : table.activa === true ? (
@@ -709,6 +741,8 @@ function PointOfSaleView({
   const [sale, setSale] = useState<SaleRecord | null>(null)
   const [counterLines, setCounterLines] = useState<SaleLine[]>([])
   const [history, setHistory] = useState<SaleRecord[]>([])
+  const [historyStart, setHistoryStart] = useState(colombiaDateString(new Date()))
+  const [historyEnd, setHistoryEnd] = useState(colombiaDateString(new Date()))
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
   const [amountReceived, setAmountReceived] = useState(0)
@@ -731,9 +765,13 @@ function PointOfSaleView({
     }
   }
 
-  const loadHistory = async () => {
+  const loadHistory = async (start?: string, end?: string) => {
     try {
-      setHistory(await api<SaleRecord[]>('/api/ventas'))
+      const params = new URLSearchParams()
+      if (start) params.set('fecha_inicio', start)
+      if (end) params.set('fecha_fin', end)
+      const query = params.size > 0 ? `?${params.toString()}` : ''
+      setHistory(await api<SaleRecord[]>(`/api/ventas${query}`))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible cargar las ventas del día')
     }
@@ -949,6 +987,65 @@ function PointOfSaleView({
     }
   }
 
+  const releaseEmptyTable = async () => {
+    if (!sale || sale.mesa_id === null || lines.length > 0) return
+    setError('')
+    setNotice('')
+    try {
+      await api<TableRecord>(`/api/mesas/${sale.mesa_id}/liberar`, { method: 'POST' })
+      setSale(null)
+      setTableId('')
+      await loadBase()
+      setNotice('Mesa liberada')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible liberar la mesa')
+    }
+  }
+
+  const showTodaySales = () => {
+    const today = colombiaDateString(new Date())
+    setHistoryStart(today)
+    setHistoryEnd(today)
+    void loadHistory()
+  }
+
+  const showYesterdaySales = () => {
+    const date = shiftDate(colombiaDateString(new Date()), -1)
+    setHistoryStart(date)
+    setHistoryEnd(date)
+    void loadHistory(date, date)
+  }
+
+  const showLastSevenDays = () => {
+    const end = colombiaDateString(new Date())
+    const start = shiftDate(end, -6)
+    setHistoryStart(start)
+    setHistoryEnd(end)
+    void loadHistory(start, end)
+  }
+
+  const queryCustomHistory = () => {
+    if (!historyStart || !historyEnd) {
+      setError('Selecciona las fechas Desde y Hasta para consultar.')
+      return
+    }
+    if (historyStart > historyEnd) {
+      setError('La fecha Desde no puede ser posterior a Hasta.')
+      return
+    }
+    setError('')
+    void loadHistory(historyStart, historyEnd)
+  }
+
+  const paidHistory = history.filter((item) => item.estado === 'pagada')
+  const historyTotal = paidHistory.reduce((sum, item) => sum + item.total, 0)
+  const paymentTotals = paidHistory.reduce<Record<string, number>>((totals, item) => {
+    for (const payment of item.pagos) {
+      totals[payment.metodo_pago] = (totals[payment.metodo_pago] || 0) + payment.monto
+    }
+    return totals
+  }, {})
+
   const change = Math.max(0, Number(amountReceived || 0) - total)
   const printSaleReceipt = () => {
     setError('')
@@ -960,7 +1057,7 @@ function PointOfSaleView({
       <div className="pos-topbar">
         <div className="pos-tabs">
           <button type="button" className={section === 'pos' ? 'selected' : ''} onClick={() => setSection('pos')}><ShoppingCart size={16} /> Punto de venta</button>
-          <button type="button" className={section === 'history' ? 'selected' : ''} onClick={() => { setSection('history'); void loadHistory() }}><Receipt size={16} /> Ventas del día</button>
+          <button type="button" className={section === 'history' ? 'selected' : ''} onClick={() => setSection('history')}><Receipt size={16} /> Ventas y Comprobantes</button>
         </div>
       </div>
       {section === 'pos' && (
@@ -973,28 +1070,50 @@ function PointOfSaleView({
       {notice && <div className="success-message">{notice}</div>}
 
       {section === 'history' ? (
-        <div className="table-wrap history-wrap">
-          <table>
-            <thead><tr><th>Consecutivo</th><th>Hora</th><th>Atención</th><th>Atendió</th><th>Total</th><th>Estado</th><th></th></tr></thead>
-            <tbody>
-              {history.map((item) => (
-                <tr key={item.id}>
-                  <td><strong>{item.consecutivo}</strong></td>
-                  <td>{new Date(item.creada_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td>{item.mesa_nombre || 'Mostrador'}</td>
-                  <td>{item.usuario_nombre}</td>
-                  <td>{copCurrency.format(item.total)}</td>
-                  <td><span className={`sale-state ${item.estado}`}>{item.estado}</span></td>
-                  <td className="history-actions">
-                    <button type="button" onClick={() => setReceipt(item)}><Receipt size={15} /> Comprobante</button>
-                    {isAdmin && item.estado !== 'anulada' && <button type="button" onClick={() => void cancelSale(item.id)}>Anular</button>}
-                  </td>
-                </tr>
-              ))}
-              {history.length === 0 && <tr><td colSpan={7} className="empty-row">Aún no hay ventas hoy.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <section className="history-filters" aria-label="Filtros de ventas">
+            <div className="history-quick-filters">
+              <button type="button" onClick={showTodaySales}>Hoy</button>
+              <button type="button" onClick={showYesterdaySales}>Ayer</button>
+              <button type="button" onClick={showLastSevenDays}>Últimos 7 días</button>
+            </div>
+            <div className="history-custom-filter">
+              <label>Desde<input type="date" value={historyStart} onChange={(event) => setHistoryStart(event.target.value)} /></label>
+              <label>Hasta<input type="date" value={historyEnd} onChange={(event) => setHistoryEnd(event.target.value)} /></label>
+              <button type="button" className="primary-button" onClick={queryCustomHistory}>Consultar</button>
+            </div>
+          </section>
+          <section className="history-summary" aria-label="Resumen del periodo">
+            <article><span>Total vendido</span><strong>{copCurrency.format(historyTotal)}</strong></article>
+            <article><span>Ventas pagadas</span><strong>{paidHistory.length}</strong></article>
+            {Object.entries(paymentTotals).map(([method, amount]) => (
+              <article key={method}><span>{paymentMethodLabels[method] || method}</span><strong>{copCurrency.format(amount)}</strong></article>
+            ))}
+            {Object.keys(paymentTotals).length === 0 && <article><span>Medios de pago</span><strong>Sin pagos</strong></article>}
+          </section>
+          <div className="table-wrap history-wrap">
+            <table>
+              <thead><tr><th>Consecutivo</th><th>Hora</th><th>Atención</th><th>Atendió</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+              <tbody>
+                {history.map((item) => (
+                  <tr key={item.id}>
+                    <td><strong>{item.consecutivo}</strong></td>
+                    <td>{new Date(item.creada_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>{item.mesa_nombre || 'Mostrador'}</td>
+                    <td>{item.usuario_nombre}</td>
+                    <td>{copCurrency.format(item.total)}</td>
+                    <td><span className={`sale-state ${item.estado}`}>{item.estado}</span></td>
+                    <td className="history-actions">
+                      <button type="button" onClick={() => setReceipt(item)}><Receipt size={15} /> Comprobante</button>
+                      {isAdmin && item.estado !== 'anulada' && <button type="button" onClick={() => void cancelSale(item.id)}>Anular</button>}
+                    </td>
+                  </tr>
+                ))}
+                {history.length === 0 && <tr><td colSpan={7} className="empty-row">No hay ventas en el periodo consultado.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <>
           <div className="service-selector">
@@ -1075,6 +1194,7 @@ function PointOfSaleView({
               </div>
               <div className="ticket-total"><span>Total</span><strong>{copCurrency.format(total)}</strong></div>
               <div className="ticket-actions">
+                {serviceType === 'mesa' && sale && lines.length === 0 && <button type="button" className="secondary-button release-empty-table" onClick={() => void releaseEmptyTable()}>Liberar mesa</button>}
                 {serviceType === 'mesa' && <button type="button" className="secondary-button" disabled={!sale || lines.length === 0} onClick={() => void saveTableOrder()}>Guardar pedido en mesa</button>}
                 <button type="button" className="primary-button" disabled={lines.length === 0 || (serviceType === 'mesa' && !sale)} onClick={startPayment}>Cobrar · {copCurrency.format(total)}</button>
               </div>

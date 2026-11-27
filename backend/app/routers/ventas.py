@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_admin
@@ -16,6 +16,7 @@ from app.schemas.ventas import (
 )
 
 router = APIRouter(prefix="/ventas", tags=["Ventas POS"])
+COLOMBIA_TZ = timezone(timedelta(hours=-5), "America/Bogota")
 
 
 def serialize_sale(sale: Venta) -> VentaResponse:
@@ -273,18 +274,25 @@ def charge_table_sale(
 
 @router.get("", response_model=list[VentaResponse])
 def list_daily_sales(
+    fecha_inicio: date | None = None,
+    fecha_fin: date | None = None,
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    today = datetime.now(timezone.utc).date()
-    start = datetime.combine(today, time.min, tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
-    sales = (
-        db.query(Venta)
-        .filter(Venta.creada_en >= start, Venta.creada_en < end)
-        .order_by(Venta.creada_en.desc())
-        .all()
-    )
+    if fecha_inicio is None and fecha_fin is None:
+        fecha_inicio = datetime.now(COLOMBIA_TZ).date()
+        fecha_fin = fecha_inicio
+    if fecha_inicio is not None and fecha_fin is not None and fecha_inicio > fecha_fin:
+        raise HTTPException(status_code=400, detail="La fecha de inicio no puede ser posterior a la fecha final")
+
+    query = db.query(Venta)
+    if fecha_inicio is not None:
+        start = datetime.combine(fecha_inicio, time.min, tzinfo=COLOMBIA_TZ).astimezone(timezone.utc)
+        query = query.filter(Venta.creada_en >= start)
+    if fecha_fin is not None:
+        end = datetime.combine(fecha_fin + timedelta(days=1), time.min, tzinfo=COLOMBIA_TZ).astimezone(timezone.utc)
+        query = query.filter(Venta.creada_en < end)
+    sales = query.order_by(Venta.creada_en.desc()).all()
     return [serialize_sale(sale) for sale in sales]
 
 

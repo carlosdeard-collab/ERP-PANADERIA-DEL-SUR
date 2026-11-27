@@ -28,6 +28,7 @@ class MesaResponse(BaseModel):
     activa: bool
     venta_id: int | None
     venta_total: float | None
+    venta_items: int
     abierta_en: datetime | None
 
 

@@ -19,6 +19,7 @@ def serialize_table(table: Mesa, sale: Venta | None) -> MesaResponse:
         activa=table.activa,
         venta_id=sale.id if sale else None,
         venta_total=sale.total if sale else None,
+        venta_items=len(sale.detalles) if sale else 0,
         abierta_en=sale.creada_en if sale else None,
     )
 
@@ -30,6 +31,31 @@ def find_open_sale(db: Session, table_id: int) -> Venta | None:
         .order_by(Venta.id.desc())
         .first()
     )
+
+
+@router.post("/{table_id}/liberar", response_model=MesaResponse)
+def release_empty_table(
+    table_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    table = db.query(Mesa).filter_by(id=table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+
+    sale = find_open_sale(db, table.id)
+    if sale:
+        if sale.detalles:
+            raise HTTPException(
+                status_code=400,
+                detail="La mesa ya tiene productos agregados. Debe cobrarse o anularse desde Ventas del día.",
+            )
+        db.delete(sale)
+
+    table.estado = "libre"
+    db.commit()
+    db.refresh(table)
+    return serialize_table(table, None)
 
 
 @router.get("", response_model=list[MesaResponse])
